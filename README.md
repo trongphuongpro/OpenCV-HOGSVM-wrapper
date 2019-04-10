@@ -1,1 +1,1 @@
-## A wrapper for HOG-SVM based Object Detector in OpenCV 3
+## A wrapper for HOGSVM-based Object Detector in OpenCV 3
