@@ -15,13 +15,9 @@ public:
 			cv::Size = cv::Size(16,16), 
 			cv::Size = cv::Size(8,8));
 
-
-	std::vector<float> getDetector(const cv::Ptr<cv::ml::SVM>&);
-
 	void loadTrainingSet(const char*, 
 						const char*);
 
-	
 	void train();
 	void evaluate(const char*);
 	std::vector<cv::Rect> detect(const cv::Mat&, int = 8, float = 1.15);
@@ -30,8 +26,6 @@ public:
 	void saveModel(const cv::String);
 	void loadModel(const cv::String);
 	void showInfo();
-
-
 
 private:
 
@@ -62,6 +56,8 @@ private:
 	void prepareData();
 	std::vector<float> getLinearSVC();
 	void softTrain(float);
+	void hardTrain();
+	
 	void hardNegativeMine();
 
 	std::vector<cv::Rect> nonMaxSuppression(const std::vector<double>&, 

@@ -235,21 +235,8 @@ void HOGSVM::computeHOG(bool use_flip) {
 
 void HOGSVM::train() {
 	if (posCount > 0 && negCount > 0) {
-		computeHOG();
-		prepareData();
-
 		softTrain(1.0);
-		hardNegativeMine();
-
-		computeHOG();
-		prepareData();
-
-		clog << "Training SVM...";
-		svm->train(trainData, ROW_SAMPLE, trainingLabels);
-		clog << "...[Done]" << endl;
-
-		hog.setSVMDetector(getLinearSVC());
-		cout << "C: " << svm->getC() << " Nu: " << svm->getNu() << endl;
+		hardTrain();
 	}
 	else {
 		cerr << "No training data!" << endl;
@@ -258,7 +245,14 @@ void HOGSVM::train() {
 
 
 void HOGSVM::softTrain(float C) {
-	clog << "Training SVM...";
+	
+
+	computeHOG();
+	prepareData();
+
+	clog << "[Done]" << endl;
+
+	clog << "Soft training...";
 
 	svm = SVM::create();
     svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 
@@ -274,13 +268,25 @@ void HOGSVM::softTrain(float C) {
 
 	svm->train(trainData, ROW_SAMPLE, trainingLabels);
     hog.setSVMDetector(getLinearSVC());
-    clog << "...[Done]" << endl;
+    clog << "[Done]" << endl;
 }
 
+void HOGSVM::hardTrain() {
+	hardNegativeMine();
 
+	computeHOG();
+	prepareData();
+
+	clog << "Hard training...";
+	svm->train(trainData, ROW_SAMPLE, trainingLabels);
+	clog << "[Done]" << endl;
+
+	hog.setSVMDetector(getLinearSVC());
+	cout << "C: " << svm->getC() << " Nu: " << svm->getNu() << endl;
+}
 
 void HOGSVM::hardNegativeMine() {
-	clog << "Testing trained detector on negative images...";
+	clog << "Hard negative mining on negative images...";
 
 	vector<Rect> detections;
 	vector<double> foundWeights;
@@ -308,7 +314,7 @@ void HOGSVM::hardNegativeMine() {
 	negCount += counter;
 	trainingLabels.insert(trainingLabels.end(), counter, -1);
 
-	clog << "...[Done]" << endl;
+	clog << "[Done]" << endl;
 }
 
 
@@ -350,16 +356,16 @@ vector<float> HOGSVM::getLinearSVC() {
 
 
 void HOGSVM::saveModel(const String path) {
-
+	clog << "Saving model...";
     hog.save(path);
-
+    clog << "[Done]" << endl;
 }
 
 
 void HOGSVM::loadModel(const String path) {
-
+	clog << "Loading model...";
 	hog.load(path);
-
+	clog << "[Done]" << endl;
 }
 
 
