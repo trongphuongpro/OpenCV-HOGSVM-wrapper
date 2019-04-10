@@ -35,7 +35,6 @@ private:
 	int truePos, posPredict, posActual;
 
 	std::vector<cv::Mat> trainingImages;
-	std::vector<cv::Mat> testingImages;
 	std::vector<int> trainingLabels;
 	std::vector<cv::Mat> gradientList;
 	std::vector<cv::Mat> negImageList;
@@ -57,7 +56,7 @@ private:
 	std::vector<float> getLinearSVC();
 	void softTrain(float);
 	void hardTrain();
-	
+
 	void hardNegativeMine();
 
 	std::vector<cv::Rect> nonMaxSuppression(const std::vector<double>&, 
