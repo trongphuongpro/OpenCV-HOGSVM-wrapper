@@ -34,32 +34,41 @@ HOGSVM::HOGSVM(int _bin,
 void HOGSVM::loadTrainingSet(const char* annotation,
 							const char* neg) {
 
-	loadPositiveImages(annotation);
-	loadNegativeImages(neg);
+	
+	chooseWindowSize(annotation);
+	loadPositiveData(annotation);
+	loadNegativeData(neg);
 	
 }
 
 
-void HOGSVM::loadNegativeImages(const char* path) {
-
+void HOGSVM::loadNegativeData(const char* path) {
+	clog << "Loading negative data...";
 	if (path != NULL) {
-		negImageList = loadImages(path);
-		sampleNegativeImages(negImageList);
 
-		negCount = negImageList.size();
+		int count = sampleNegativeImages(path);
+		negCount += count;
 
-		trainingLabels.insert(trainingLabels.end(), negCount, -1);
+		trainLabels.insert(trainLabels.end(), count, -1);
 	}
+	clog << "[Done]" << endl;
 }
 
 
-vector<Mat> HOGSVM::loadImages(const char* dirname) {
+int HOGSVM::sampleNegativeImages(const char* dirname) {
 
 	Mat img;
-	vector<Mat> imgList;
 	vector<String> files;
+	Rect box;
+	int counter = 0;
 
 	glob(dirname, files, true);
+
+	box.width = windowSize.width;
+	box.height = windowSize.height;
+
+	const int size_x = box.width;
+	const int size_y = box.height;
 
 	for (size_t i = 0; i < files.size(); i++) {
 		img = imread(files[i]);
@@ -68,31 +77,33 @@ vector<Mat> HOGSVM::loadImages(const char* dirname) {
 			continue;
 		}
 
-		imgList.push_back(img);
+		srand((unsigned int)time(NULL));
+
+		
+		if (img.cols > box.width && img.rows > box.height) {
+			counter++;
+
+			box.x = rand() % (img.cols - size_x);
+			box.y = rand() % (img.rows - size_y);
+
+			Mat roi = img(box);
+			computeHOG(roi);
+		}
 	}
 
-	clog << "Negative set size: " << imgList.size() << endl;
-
-	return imgList;
+	clog << "Negative set size: " << counter << endl;
+	clog << "Total: " << gradientList.size() << endl;
+	return counter;
 }
 
 
-void HOGSVM::loadPositiveImages(const char* annotation) {
-
+void HOGSVM::loadPositiveData(const char* annotation) {
+	clog << "Loading positive data...";
 	int counter = samplePositiveImages(annotation, true);
 
-    windowSize.width /= counter;
-    windowSize.height /= counter;
-
-    clog << "avg. window: " << windowSize << endl;
-
-	chooseWindowSize(windowSize);
-
-	clog << "window: " << windowSize << endl;
-	clog << "Positive set size: " << counter << endl;
-
 	posCount += counter;
-	trainingLabels.insert(trainingLabels.end(), counter, +1);
+	trainLabels.insert(trainLabels.end(), counter, +1);
+	clog << "[Done]" << endl;
 }
 
 
@@ -145,11 +156,7 @@ int HOGSVM::samplePositiveImages(const char* annotation, bool sampling) {
  
  				if (sampling) {
  					Mat roi = img(bb);
-
-            		windowSize.width += bb.width;
-            		windowSize.height += bb.height;
-
-            		trainingImages.push_back(roi.clone());
+ 					computeHOG(roi);
             	}
             	else {
             		vector<Rect> detections = detect(img, 8, 1.15);
@@ -162,12 +169,81 @@ int HOGSVM::samplePositiveImages(const char* annotation, bool sampling) {
         }
         image = image->NextSiblingElement();
     }
+
+    clog << "Positive size: " << counter << endl;
+    clog << "Total: " << gradientList.size() << endl;
     return counter;
 }
 
 
-void HOGSVM::chooseWindowSize(Size& windowSize) {
+int HOGSVM::checkWindowSize(const char* annotation) {
+	string path(annotation);
+	path = path.substr(0, path.find_last_of("/")) + '/';
+
+	XMLDocument xmlDoc;
+    XMLError eResult = xmlDoc.LoadFile(annotation);
+ 
+    if (eResult) {
+        cerr << XMLDocument::ErrorIDToName(eResult) << endl;
+        exit(1);
+    }
+ 
+    XMLElement *root = xmlDoc.RootElement();
+ 
+    XMLElement *image = root->FirstChildElement("images")
+  						    ->FirstChildElement("image");
+    const char *filename;
+ 	Mat img;
+ 	int counter = 0;
+    while (image != nullptr) {
+    	filename = nullptr;
+        XMLError eResult = image->QueryStringAttribute("file", &filename);
+
+        if (eResult) {
+        	cerr << XMLDocument::ErrorIDToName(eResult) << endl;
+        	continue;
+        }
+
+
+ 		img = imread(path + filename);
+
+        Rect bb;
+        int ignore;
+
+        XMLElement *box = image->FirstChildElement("box");
+        while (box != nullptr) {
+        	ignore = 0;
+        	box->QueryAttribute("ignore", &ignore);
+
+        	if (!ignore) {
+        		counter++;
+        	
+            	box->QueryAttribute("top", &(bb.y));
+            	box->QueryAttribute("left", &(bb.x));
+            	box->QueryAttribute("width", &(bb.width));
+            	box->QueryAttribute("height", &(bb.height));
+ 
+ 				windowSize.width += bb.width;
+ 				windowSize.height += bb.height;
+        	}
+        	
+            box = box->NextSiblingElement();
+        }
+        image = image->NextSiblingElement();
+    }
+    return counter;
+}
+
+
+void HOGSVM::chooseWindowSize(const char* annotation) {
 	
+	int counter = checkWindowSize(annotation);
+
+	windowSize.width /= counter;
+    windowSize.height /= counter;
+
+    clog << "avg. window: " << windowSize << endl;
+
 	float origRatio = float(windowSize.width) / windowSize.height;
 	Size smallSize(windowSize.width / 16 * 8, windowSize.height / 16 * 8);
 	Size bigSize((windowSize.width/16 + 1) * 8, (windowSize.height/16 + 1) * 8);
@@ -181,55 +257,22 @@ void HOGSVM::chooseWindowSize(Size& windowSize) {
 		windowSize = smallSize; 
 	}
 
+	clog << "window: " << windowSize << endl;
 	hog.winSize = windowSize;
 }
 
 
-void HOGSVM::sampleNegativeImages(const vector<Mat>& full_neg_lst) {
 
-	Rect box;
-	box.width = windowSize.width;
-	box.height = windowSize.height;
-
-	const int size_x = box.width;
-	const int size_y = box.height;
-
-	srand((unsigned int)time(NULL));
-
-	for (size_t i = 0; i < full_neg_lst.size(); i++) {
-		if (full_neg_lst[i].cols > box.width
-			&& full_neg_lst[i].rows > box.height) {
-
-			box.x = rand() % (full_neg_lst[i].cols - size_x);
-			box.y = rand() % (full_neg_lst[i].rows - size_y);
-
-			Mat roi = full_neg_lst[i](box);
-			trainingImages.push_back(roi.clone());
-		}
-	}
-}
-
-
-void HOGSVM::computeHOG(bool use_flip) {
+void HOGSVM::computeHOG(Mat& roi) {
 
 	Mat gray;
 	vector<float> descriptors;
-	gradientList.clear();
 
-	for (size_t i = 0; i < trainingImages.size(); i++) {
+	resize(roi, roi, windowSize);
+	cvtColor(roi, gray, COLOR_BGR2GRAY);
 
-		resize(trainingImages[i], trainingImages[i], windowSize);
-		cvtColor(trainingImages[i], gray, COLOR_BGR2GRAY);
-
-		hog.compute(gray, descriptors, Size(8,8), Size(0,0));
-		gradientList.push_back(Mat(descriptors).clone());
-
-		if (use_flip) {
-			flip(gray, gray, 1);
-			hog.compute(gray, descriptors, Size(8,8), Size(0,0));
-			gradientList.push_back(Mat(descriptors).clone());
-		}
-	}
+	hog.compute(gray, descriptors, Size(8,8), Size(0,0));
+	gradientList.push_back(Mat(descriptors).clone());
 }
 
 
@@ -246,11 +289,7 @@ void HOGSVM::train() {
 
 void HOGSVM::softTrain(float C) {
 	
-
-	computeHOG();
 	prepareData();
-
-	clog << "[Done]" << endl;
 
 	clog << "Soft training...";
 
@@ -266,53 +305,61 @@ void HOGSVM::softTrain(float C) {
 
     svm->setType(SVM::NU_SVR);
 
-	svm->train(trainData, ROW_SAMPLE, trainingLabels);
+	svm->train(trainData, ROW_SAMPLE, trainLabels);
     hog.setSVMDetector(getLinearSVC());
     clog << "[Done]" << endl;
 }
 
 void HOGSVM::hardTrain() {
-	hardNegativeMine();
+	hardNegativeMine("/home/guru/learnCV/ObjectDetection/scene13");
 
-	computeHOG();
 	prepareData();
 
 	clog << "Hard training...";
-	svm->train(trainData, ROW_SAMPLE, trainingLabels);
+	svm->train(trainData, ROW_SAMPLE, trainLabels);
 	clog << "[Done]" << endl;
 
 	hog.setSVMDetector(getLinearSVC());
 	cout << "C: " << svm->getC() << " Nu: " << svm->getNu() << endl;
 }
 
-void HOGSVM::hardNegativeMine() {
+void HOGSVM::hardNegativeMine(const char* dirname) {
 	clog << "Hard negative mining on negative images...";
+
+	Mat img;
+	vector<String> files;
+	Rect box;
 
 	vector<Rect> detections;
 	vector<double> foundWeights;
 	int counter = 0;
 
-	for (size_t i = 0; i < negImageList.size(); i++) {
-		if (negImageList[i].cols >= windowSize.width
-			&& negImageList[i].rows >= windowSize.height) {
+	glob(dirname, files, true);
 
-			hog.detectMultiScale(negImageList[i], detections, foundWeights);
+	for (size_t i = 0; i < files.size(); i++) {
+		img = imread(files[i]);
+		if (img.empty()) {
+			cerr << files[i] << " is invalid!" << endl;
+			continue;
 		}
-		else {
-			detections.clear();
-		}
+
+		detections.clear();
+		foundWeights.clear();
+
+		hog.detectMultiScale(img, detections, foundWeights);
+	
 		for (size_t j = 0; j < detections.size(); j++) {
 			counter++;
 
-			Mat detection = negImageList[i](detections[j]).clone();
+			Mat detection = img(detections[j]).clone();
 			resize(detection, detection, windowSize, 0, 0, cv::INTER_CUBIC);
 
-			trainingImages.push_back(detection);
+			computeHOG(detection);
 		}
 	}
 
 	negCount += counter;
-	trainingLabels.insert(trainingLabels.end(), counter, -1);
+	trainLabels.insert(trainLabels.end(), counter, -1);
 
 	clog << "[Done]" << endl;
 }

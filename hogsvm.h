@@ -34,30 +34,31 @@ private:
 	int posCount, negCount;
 	int truePos, posPredict, posActual;
 
-	std::vector<cv::Mat> trainingImages;
-	std::vector<int> trainingLabels;
+	cv::Mat trainData;
+	std::vector<int> trainLabels;
 	std::vector<cv::Mat> gradientList;
-	std::vector<cv::Mat> negImageList;
 	cv::Ptr<cv::ml::SVM> svm;
 	cv::HOGDescriptor hog;
 	
-	cv::Mat trainData;
+	
 
-	std::vector<cv::Mat> loadImages(const char*);
-	void loadPositiveImages(const char*);
-	void loadNegativeImages(const char*);
+	//std::vector<cv::Mat> loadImages(const char*);
+	void loadPositiveData(const char*);
+	void loadNegativeData(const char*);
 
 	int samplePositiveImages(const char*, bool);
-	void sampleNegativeImages(const std::vector<cv::Mat>&);
+	int sampleNegativeImages(const char*);
 
-	void computeHOG(bool = false);
-	void chooseWindowSize(cv::Size&);
+	void computeHOG(cv::Mat&);
+
+	int checkWindowSize(const char*);
+	void chooseWindowSize(const char*);
 	void prepareData();
 	std::vector<float> getLinearSVC();
 	void softTrain(float);
 	void hardTrain();
 
-	void hardNegativeMine();
+	void hardNegativeMine(const char*);
 
 	std::vector<cv::Rect> nonMaxSuppression(const std::vector<double>&, 
 											const std::vector<cv::Rect>&,
