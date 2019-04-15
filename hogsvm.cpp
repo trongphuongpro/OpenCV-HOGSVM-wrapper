@@ -42,140 +42,6 @@ void HOGSVM::loadTrainingSet(const char* annotation,
 }
 
 
-void HOGSVM::loadNegativeData(const char* path) {
-	clog << "Loading negative data...";
-	if (path != NULL) {
-
-		int count = sampleNegativeImages(path);
-		negCount += count;
-
-		trainLabels.insert(trainLabels.end(), count, -1);
-	}
-	clog << "[Done]" << endl;
-}
-
-
-int HOGSVM::sampleNegativeImages(const char* dirname) {
-
-	Mat img;
-	vector<String> files;
-	Rect box;
-	int counter = 0;
-
-	glob(dirname, files, true);
-
-	box.width = windowSize.width;
-	box.height = windowSize.height;
-
-	const int size_x = box.width;
-	const int size_y = box.height;
-
-	for (size_t i = 0; i < files.size(); i++) {
-		img = imread(files[i]);
-		if (img.empty()) {
-			cerr << files[i] << " is invalid!" << endl;
-			continue;
-		}
-
-		srand((unsigned int)time(NULL));
-
-		
-		if (img.cols > box.width && img.rows > box.height) {
-			counter++;
-
-			box.x = rand() % (img.cols - size_x);
-			box.y = rand() % (img.rows - size_y);
-
-			Mat roi = img(box);
-			computeHOG(roi);
-		}
-	}
-
-	clog << "Negative set size: " << counter << endl;
-	clog << "Total: " << gradientList.size() << endl;
-	return counter;
-}
-
-
-void HOGSVM::loadPositiveData(const char* annotation) {
-	clog << "Loading positive data...";
-	int counter = samplePositiveImages(annotation, true);
-
-	posCount += counter;
-	trainLabels.insert(trainLabels.end(), counter, +1);
-	clog << "[Done]" << endl;
-}
-
-
-int HOGSVM::samplePositiveImages(const char* annotation, bool sampling) {
-	string path(annotation);
-	path = path.substr(0, path.find_last_of("/")) + '/';
-
-	XMLDocument xmlDoc;
-    XMLError eResult = xmlDoc.LoadFile(annotation);
- 
-    if (eResult) {
-        cerr << XMLDocument::ErrorIDToName(eResult) << endl;
-        exit(1);
-    }
- 
-    XMLElement *root = xmlDoc.RootElement();
- 
-    XMLElement *image = root->FirstChildElement("images")
-  						    ->FirstChildElement("image");
-    const char *filename;
- 	Mat img;
- 	int counter = 0;
-    while (image != nullptr) {
-    	filename = NULL;
-        XMLError eResult = image->QueryStringAttribute("file", &filename);
-
-        if (eResult) {
-        	cerr << XMLDocument::ErrorIDToName(eResult) << endl;
-        	continue;
-        }
-
-
- 		img = imread(path + filename);
-
-        Rect bb;
-        int ignore;
-
-        XMLElement *box = image->FirstChildElement("box");
-        while (box != nullptr) {
-        	ignore = 0;
-        	box->QueryAttribute("ignore", &ignore);
-
-        	if (!ignore) {
-        		counter++;
-        	
-            	box->QueryAttribute("top", &(bb.y));
-            	box->QueryAttribute("left", &(bb.x));
-            	box->QueryAttribute("width", &(bb.width));
-            	box->QueryAttribute("height", &(bb.height));
- 
- 				if (sampling) {
- 					Mat roi = img(bb);
- 					computeHOG(roi);
-            	}
-            	else {
-            		vector<Rect> detections = detect(img, 8, 1.15);
-            		posPredict += detections.size();
-            		truePos += computeIOU(detections, bb);
-            	}
-        	}
-        	
-            box = box->NextSiblingElement();
-        }
-        image = image->NextSiblingElement();
-    }
-
-    clog << "Positive size: " << counter << endl;
-    clog << "Total: " << gradientList.size() << endl;
-    return counter;
-}
-
-
 int HOGSVM::checkWindowSize(const char* annotation) {
 	string path(annotation);
 	path = path.substr(0, path.find_last_of("/")) + '/';
@@ -262,6 +128,139 @@ void HOGSVM::chooseWindowSize(const char* annotation) {
 }
 
 
+void HOGSVM::loadPositiveData(const char* annotation) {
+	clog << "Loading positive data...";
+	int counter = samplePositiveImages(annotation, true);
+
+	posCount += counter;
+	trainLabels.insert(trainLabels.end(), counter, +1);
+	clog << "[Done]" << endl;
+}
+
+
+int HOGSVM::samplePositiveImages(const char* annotation, bool sampling) {
+	string path(annotation);
+	path = path.substr(0, path.find_last_of("/")) + '/';
+
+	XMLDocument xmlDoc;
+    XMLError eResult = xmlDoc.LoadFile(annotation);
+ 
+    if (eResult) {
+        cerr << XMLDocument::ErrorIDToName(eResult) << endl;
+        exit(1);
+    }
+ 
+    XMLElement *root = xmlDoc.RootElement();
+ 
+    XMLElement *image = root->FirstChildElement("images")
+  						    ->FirstChildElement("image");
+    const char *filename;
+ 	Mat img;
+ 	int counter = 0;
+    while (image != nullptr) {
+    	filename = NULL;
+        XMLError eResult = image->QueryStringAttribute("file", &filename);
+
+        if (eResult) {
+        	cerr << XMLDocument::ErrorIDToName(eResult) << endl;
+        	continue;
+        }
+
+
+ 		img = imread(path + filename);
+
+        Rect bb;
+        int ignore;
+
+        XMLElement *box = image->FirstChildElement("box");
+        while (box != nullptr) {
+        	ignore = 0;
+        	box->QueryAttribute("ignore", &ignore);
+
+        	if (!ignore) {
+        		counter++;
+        	
+            	box->QueryAttribute("top", &(bb.y));
+            	box->QueryAttribute("left", &(bb.x));
+            	box->QueryAttribute("width", &(bb.width));
+            	box->QueryAttribute("height", &(bb.height));
+ 
+ 				if (sampling) {
+ 					Mat roi = img(bb);
+ 					computeHOG(roi);
+            	}
+            	else {
+            		vector<Rect> detections = detect(img, 8, 1.15);
+            		posPredict += detections.size();
+            		truePos += computeIOU(detections, bb);
+            	}
+        	}
+        	
+            box = box->NextSiblingElement();
+        }
+        image = image->NextSiblingElement();
+    }
+
+    clog << "Positive size: " << counter << endl;
+    clog << "Total: " << gradientList.size() << endl;
+    return counter;
+}
+
+
+void HOGSVM::loadNegativeData(const char* path) {
+	clog << "Loading negative data...";
+	if (path != NULL) {
+
+		int count = sampleNegativeImages(path);
+		negCount += count;
+
+		trainLabels.insert(trainLabels.end(), count, -1);
+	}
+	clog << "[Done]" << endl;
+}
+
+
+int HOGSVM::sampleNegativeImages(const char* dirname) {
+
+	Mat img;
+	vector<String> files;
+	Rect box;
+	int counter = 0;
+
+	glob(dirname, files, true);
+
+	box.width = windowSize.width;
+	box.height = windowSize.height;
+
+	const int size_x = box.width;
+	const int size_y = box.height;
+
+	for (size_t i = 0; i < files.size(); i++) {
+		img = imread(files[i]);
+		if (img.empty()) {
+			cerr << files[i] << " is invalid!" << endl;
+			continue;
+		}
+
+		srand((unsigned int)time(NULL));
+
+		
+		if (img.cols > box.width && img.rows > box.height) {
+			counter++;
+
+			box.x = rand() % (img.cols - size_x);
+			box.y = rand() % (img.rows - size_y);
+
+			Mat roi = img(box);
+			computeHOG(roi);
+		}
+	}
+
+	clog << "Negative set size: " << counter << endl;
+	clog << "Total: " << gradientList.size() << endl;
+	return counter;
+}
+
 
 void HOGSVM::computeHOG(Mat& roi) {
 
@@ -279,7 +278,7 @@ void HOGSVM::computeHOG(Mat& roi) {
 void HOGSVM::train() {
 	if (posCount > 0 && negCount > 0) {
 		softTrain(1.0);
-		hardTrain();
+		hardTrain("/home/guru/learnCV/ObjectDetection/scene13");
 	}
 	else {
 		cerr << "No training data!" << endl;
@@ -310,8 +309,9 @@ void HOGSVM::softTrain(float C) {
     clog << "[Done]" << endl;
 }
 
-void HOGSVM::hardTrain() {
-	hardNegativeMine("/home/guru/learnCV/ObjectDetection/scene13");
+
+void HOGSVM::hardTrain(const char* path) {
+	hardNegativeMine(path);
 
 	prepareData();
 
@@ -322,6 +322,7 @@ void HOGSVM::hardTrain() {
 	hog.setSVMDetector(getLinearSVC());
 	cout << "C: " << svm->getC() << " Nu: " << svm->getNu() << endl;
 }
+
 
 void HOGSVM::hardNegativeMine(const char* dirname) {
 	clog << "Hard negative mining on negative images...";
@@ -461,41 +462,32 @@ void HOGSVM::showInfo() {
 
 
 vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
+	vector<Rect> rawDetections;
 	vector<Rect> detections;
+	vector<double> rawFoundWeights;
     vector<double> foundWeights;
 
     Mat gray;
     cvtColor(image, gray, COLOR_BGR2GRAY);
 
     hog.detectMultiScale(gray, 
-						detections, 
-						foundWeights, 
+						rawDetections, 
+						rawFoundWeights, 
 						0, 
 						Size(step,step),
 						Size(0,0),
 						scale);
 
-    for (const auto& e: foundWeights)
-    	cout << e << endl;
+    for (size_t i = 0; i < rawDetections.size(); i++) {
+    	if (rawFoundWeights[i] > 0.6) {
+    		detections.push_back(rawDetections[i]);
+    		foundWeights.push_back(rawFoundWeights[i]);
+    	}
+    }
 
     detections = nonMaxSuppression(foundWeights, detections);
 
     return detections;
-}
-
-
-template<typename T>
-	vector<size_t> HOGSVM::argsort(const vector<T>& input) {
-	vector<size_t> idxs(input.size());
-	iota(idxs.begin(), idxs.end(), 0);
-	    
-	sort(idxs.begin(), 
-	  		idxs.end(), 
-	  		[&](size_t a, size_t b) {
-	            return input[a] < input[b];
-	        });
-	                
-	return idxs;
 }
 
 
@@ -554,6 +546,21 @@ vector<Rect> HOGSVM::nonMaxSuppression(const vector<double>& confidences,
 		}
 	}
 	return pick;
+}
+
+
+template<typename T>
+	vector<size_t> HOGSVM::argsort(const vector<T>& input) {
+	vector<size_t> idxs(input.size());
+	iota(idxs.begin(), idxs.end(), 0);
+	    
+	sort(idxs.begin(), 
+	  		idxs.end(), 
+	  		[&](size_t a, size_t b) {
+	            return input[a] < input[b];
+	        });
+	                
+	return idxs;
 }
 
 

@@ -56,7 +56,7 @@ private:
 	void prepareData();
 	std::vector<float> getLinearSVC();
 	void softTrain(float);
-	void hardTrain();
+	void hardTrain(const char*);
 
 	void hardNegativeMine(const char*);
 
