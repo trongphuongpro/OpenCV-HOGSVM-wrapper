@@ -7,6 +7,7 @@
 #include "opencv2/highgui.hpp"
 #include "opencv2/objdetect.hpp"
 
+
 class HOGSVM {
 public:
 
@@ -20,11 +21,13 @@ public:
 
 	void train();
 	void evaluate(const char*);
-	std::vector<cv::Rect> detect(const cv::Mat&, int = 8, float = 1.15);
+	std::vector<cv::Rect> detect(const cv::Mat&, 
+								int = 8, 
+								float = 1.15);
 
 	int testVideo(const char*);
-	void saveModel(const cv::String);
-	void loadModel(const cv::String);
+	void saveModel(const cv::String&);
+	void loadModel(const cv::String&);
 	void showInfo();
 
 private:
@@ -41,8 +44,6 @@ private:
 	cv::HOGDescriptor hog;
 	
 	
-
-	//std::vector<cv::Mat> loadImages(const char*);
 	void loadPositiveData(const char*);
 	void loadNegativeData(const char*);
 
@@ -64,7 +65,8 @@ private:
 											const std::vector<cv::Rect>&,
 											float = 0.3);
 
-	int computeIOU(const std::vector<cv::Rect>&, const cv::Rect&);
+	int computeIOU(const std::vector<cv::Rect>&, 
+					const cv::Rect&);
 
 	template<typename T>
 	std::vector<std::size_t> argsort(const std::vector<T>&);

@@ -1,5 +1,4 @@
 #include "hogsvm.h"
-#include "opencv2/core/utility.hpp"
 #include "tinyxml2.h"
 #include <iostream>
 #include <algorithm>
@@ -380,6 +379,7 @@ void HOGSVM::prepareData() {
 		transpose(gradientList[i], tmp);
 		tmp.copyTo(trainData.row(int(i)));
 	}
+
 }
 
 
@@ -403,14 +403,14 @@ vector<float> HOGSVM::getLinearSVC() {
 }
 
 
-void HOGSVM::saveModel(const String path) {
+void HOGSVM::saveModel(const String& path) {
 	clog << "Saving model...";
     hog.save(path);
     clog << "[Done]" << endl;
 }
 
 
-void HOGSVM::loadModel(const String path) {
+void HOGSVM::loadModel(const String& path) {
 	clog << "Loading model...";
 	hog.load(path);
 	clog << "[Done]" << endl;
@@ -594,3 +594,4 @@ int HOGSVM::computeIOU(const vector<Rect>& detections, const Rect& bb) {
 
 	return (IoU > 0.5) ? 1 : 0;
 }
+
