@@ -11,10 +11,15 @@
 class HOGSVM {
 public:
 
-	HOGSVM(int = 9, 
-			cv::Size = cv::Size(8,8), 
-			cv::Size = cv::Size(16,16), 
-			cv::Size = cv::Size(8,8));
+	static HOGSVM createMultiScale(int = 9, 
+									cv::Size = cv::Size(8,8), 
+									cv::Size = cv::Size(16,16), 
+									cv::Size = cv::Size(8,8));
+
+	static HOGSVM create(int = 9, 
+						cv::Size = cv::Size(8,8), 
+						cv::Size = cv::Size(16,16), 
+						cv::Size = cv::Size(8,8));
 
 	void loadTrainingSet(const char*, 
 						const char*);
@@ -25,13 +30,13 @@ public:
 								int = 8, 
 								float = 1.15);
 
-	int testVideo(const char*);
+	int testVideo(const char*, float = 0.5);
 	void saveModel(const cv::String&);
 	void loadModel(const cv::String&);
 	void showInfo();
 
 private:
-
+	bool multiScaleFlag = true;
 	cv::Size windowSize;
 
 	int posCount, negCount;
@@ -43,7 +48,8 @@ private:
 	cv::Ptr<cv::ml::SVM> svm;
 	cv::HOGDescriptor hog;
 	
-	
+	HOGSVM(int, cv::Size, cv::Size, cv::Size, bool);
+
 	void loadPositiveData(const char*);
 	void loadNegativeData(const char*);
 

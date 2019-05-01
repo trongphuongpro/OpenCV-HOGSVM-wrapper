@@ -16,17 +16,49 @@ using namespace tinyxml2;
 HOGSVM::HOGSVM(int _bin, 
 				Size _cellSize, 
 				Size _blockSize, 
-				Size _blockStride) {
+				Size _blockStride,
+				bool _multiScale) {
 
 	hog.nbins = _bin;
 	hog.cellSize = _cellSize;
 	hog.blockSize = _blockSize;
 	hog.blockStride = _blockStride;
 
+	multiScaleFlag = _multiScale;
+
 	posCount = 0;
 	negCount = 0;
 
 	truePos = posPredict = posActual = 0;
+}
+
+
+HOGSVM HOGSVM::createMultiScale(int _bin, 
+										Size _cellSize, 
+										Size _blockSize, 
+										Size _blockStride) {
+
+	HOGSVM detector(_bin, 
+					_cellSize, 
+					_blockSize, 
+					_blockStride,
+					true);
+
+	return detector;
+}
+
+
+HOGSVM HOGSVM::create(int _bin, 
+							Size _cellSize, 
+							Size _blockSize, 
+							Size _blockStride) {
+
+	HOGSVM detector(_bin, 
+					_cellSize, 
+					_blockSize, 
+					_blockStride,
+					false);
+	return detector;
 }
 
 
@@ -96,22 +128,27 @@ int HOGSVM::checkWindowSize(const char* annotation) {
         }
         image = image->NextSiblingElement();
     }
+
+    windowSize.width /= counter;
+    windowSize.height /= counter;
+
     return counter;
 }
 
 
 void HOGSVM::chooseWindowSize(const char* annotation) {
 	
-	int counter = checkWindowSize(annotation);
-
-	windowSize.width /= counter;
-    windowSize.height /= counter;
+	checkWindowSize(annotation);
+	int factor = 1;
 
     clog << "avg. window: " << windowSize << endl;
 
+    if (multiScaleFlag)
+    	factor = 2;
+
 	float origRatio = float(windowSize.width) / windowSize.height;
-	Size smallSize(windowSize.width / 16 * 8, windowSize.height / 16 * 8);
-	Size bigSize((windowSize.width/16 + 1) * 8, (windowSize.height/16 + 1) * 8);
+	Size smallSize(windowSize.width / (8 * factor) * 8, windowSize.height / (8 * factor) * 8);
+	Size bigSize((windowSize.width / (8 * factor) + 1) * 8, (windowSize.height / (8 * factor) + 1) * 8);
 	float smallSizeRatio = float(smallSize.width) / smallSize.height;
 	float bigSizeRatio = float(bigSize.width) / bigSize.height;
 
@@ -346,7 +383,10 @@ void HOGSVM::hardNegativeMine(const char* dirname) {
 		detections.clear();
 		foundWeights.clear();
 
-		hog.detectMultiScale(img, detections, foundWeights);
+		hog.detectMultiScale(img, 
+							detections, 
+							foundWeights, 
+							0, Size(8,8), Size(0,0), 1.15);
 	
 		for (size_t j = 0; j < detections.size(); j++) {
 			counter++;
@@ -417,12 +457,17 @@ void HOGSVM::loadModel(const String& path) {
 }
 
 
-int HOGSVM::testVideo(const char* filename) {
+int HOGSVM::testVideo(const char* filename, float scale) {
 
 	clog << "Testing trained detector..." << endl;
 	
 	VideoCapture cap;
+	
 	cap.open(filename);
+	int width = int(cap.get(CAP_PROP_FRAME_WIDTH) * scale);
+	int height = int(cap.get(CAP_PROP_FRAME_HEIGHT) * scale);
+	cout << "frame width: " << width << endl;
+	cout << "frame height: " << height << endl;
     Mat img;
     size_t i;
     for(i = 0;; i++) {
@@ -434,7 +479,7 @@ int HOGSVM::testVideo(const char* filename) {
             break;
         }
 
-        resize(img, img, Size(640,480));
+        resize(img, img, Size(width, height));
         vector<Rect> detections;
 
         if (i % 3 == 0) {
@@ -447,7 +492,7 @@ int HOGSVM::testVideo(const char* filename) {
     	}
 		
         imshow("frame", img);
-        if(waitKey(1) == 27) {
+        if (waitKey(1) == 27) {
             break;
         }
     }
@@ -462,7 +507,8 @@ void HOGSVM::showInfo() {
 
 
 vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
-	vector<Rect> rawDetections;
+	vector<Rect> rawRectDetections;
+	vector<Point> rawPointDetections;
 	vector<Rect> detections;
 	vector<double> rawFoundWeights;
     vector<double> foundWeights;
@@ -470,20 +516,39 @@ vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
     Mat gray;
     cvtColor(image, gray, COLOR_BGR2GRAY);
 
-    hog.detectMultiScale(gray, 
-						rawDetections, 
-						rawFoundWeights, 
-						0, 
-						Size(step,step),
-						Size(0,0),
-						scale);
+    if (multiScaleFlag) {
+    	hog.detectMultiScale(gray, 
+							rawRectDetections, 
+							rawFoundWeights, 
+							0, 
+							Size(step,step),
+							Size(0,0),
+							scale);
 
-    for (size_t i = 0; i < rawDetections.size(); i++) {
-    	if (rawFoundWeights[i] > 0.6) {
-    		detections.push_back(rawDetections[i]);
-    		foundWeights.push_back(rawFoundWeights[i]);
+    	for (size_t i = 0; i < rawRectDetections.size(); i++) {
+    		if (rawFoundWeights[i] > 0.6) {
+    			detections.push_back(rawRectDetections[i]);
+    			foundWeights.push_back(rawFoundWeights[i]);
+    		}
     	}
     }
+    else {
+    	hog.detect(gray,
+    				rawPointDetections,
+    				rawFoundWeights,
+    				0,
+    				Size(step, step),
+    				Size(0,0));
+
+    	for (size_t i = 0; i < rawPointDetections.size(); i++) {
+    		if (rawFoundWeights[i] > 0.6) {
+    			detections.push_back(Rect(rawPointDetections[i], windowSize));
+    			foundWeights.push_back(rawFoundWeights[i]);
+    		}
+    	}
+    }
+
+    
 
     detections = nonMaxSuppression(foundWeights, detections);
 
