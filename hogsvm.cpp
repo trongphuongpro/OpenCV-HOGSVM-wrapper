@@ -17,15 +17,18 @@ HOGSVM::HOGSVM(int _bin,
 				Size _cellSize, 
 				Size _blockSize, 
 				Size _blockStride,
-				bool _multiScale) {
+				Size _windowStride,
+				bool _multiScale,
+				float _scale) {
 
 	hog.nbins = _bin;
 	hog.cellSize = _cellSize;
 	hog.blockSize = _blockSize;
 	hog.blockStride = _blockStride;
 
+	windowStride = _windowStride;
 	multiScaleFlag = _multiScale;
-
+	detectorScale = _scale;
 	posCount = 0;
 	negCount = 0;
 
@@ -34,30 +37,37 @@ HOGSVM::HOGSVM(int _bin,
 
 
 HOGSVM HOGSVM::createMultiScale(int _bin, 
-										Size _cellSize, 
-										Size _blockSize, 
-										Size _blockStride) {
+								Size _cellSize, 
+								Size _blockSize, 
+								Size _blockStride,
+								Size _windowStride,
+								float _scale) {
 
 	HOGSVM detector(_bin, 
 					_cellSize, 
 					_blockSize, 
 					_blockStride,
-					true);
+					_windowStride,
+					true,
+					_scale);
 
 	return detector;
 }
 
 
 HOGSVM HOGSVM::create(int _bin, 
-							Size _cellSize, 
-							Size _blockSize, 
-							Size _blockStride) {
+						Size _cellSize, 
+						Size _blockSize, 
+						Size _blockStride,
+						Size _windowStride) {
 
 	HOGSVM detector(_bin, 
 					_cellSize, 
 					_blockSize, 
 					_blockStride,
+					_windowStride,
 					false);
+
 	return detector;
 }
 
@@ -226,7 +236,7 @@ int HOGSVM::samplePositiveImages(const char* annotation, bool sampling) {
  					computeHOG(roi);
             	}
             	else {
-            		vector<Rect> detections = detect(img, 8, 1.15);
+            		vector<Rect> detections = detect(img, 1.15);
             		posPredict += detections.size();
             		truePos += computeIOU(detections, bb);
             	}
@@ -306,7 +316,7 @@ void HOGSVM::computeHOG(Mat& roi) {
 	resize(roi, roi, windowSize);
 	cvtColor(roi, gray, COLOR_BGR2GRAY);
 
-	hog.compute(gray, descriptors, Size(8,8), Size(0,0));
+	hog.compute(gray, descriptors, windowStride, Size(0,0));
 	gradientList.push_back(Mat(descriptors).clone());
 }
 
@@ -341,7 +351,7 @@ void HOGSVM::softTrain(float C) {
     svm->setType(SVM::NU_SVR);
 
 	svm->train(trainData, ROW_SAMPLE, trainLabels);
-    hog.setSVMDetector(getLinearSVC());
+    hog.setSVMDetector(getLinearSVC(svm));
     clog << "[Done]" << endl;
 }
 
@@ -355,7 +365,7 @@ void HOGSVM::hardTrain(const char* path) {
 	svm->train(trainData, ROW_SAMPLE, trainLabels);
 	clog << "[Done]" << endl;
 
-	hog.setSVMDetector(getLinearSVC());
+	hog.setSVMDetector(getLinearSVC(svm));
 	cout << "C: " << svm->getC() << " Nu: " << svm->getNu() << endl;
 }
 
@@ -386,9 +396,13 @@ void HOGSVM::hardNegativeMine(const char* dirname) {
 		hog.detectMultiScale(img, 
 							detections, 
 							foundWeights, 
-							0, Size(8,8), Size(0,0), 1.15);
+							0, windowStride, Size(0,0), detectorScale);
 	
 		for (size_t j = 0; j < detections.size(); j++) {
+			if (foundWeights[j] < 0.5) {
+				continue;
+			}
+
 			counter++;
 
 			Mat detection = img(detections[j]).clone();
@@ -423,12 +437,12 @@ void HOGSVM::prepareData() {
 }
 
 
-vector<float> HOGSVM::getLinearSVC() {
-	Mat sv = svm->getSupportVectors();
+vector<float> HOGSVM::getLinearSVC(const Ptr<SVM>& svmCls) {
+	Mat sv = svmCls->getSupportVectors();
 	const int sv_total = sv.rows;
 
 	Mat alpha, svidx;
-	double rho = svm->getDecisionFunction(0, alpha, svidx);
+	double rho = svmCls->getDecisionFunction(0, alpha, svidx);
 
 	CV_Assert(alpha.total() == 1 && svidx.total() == 1 && sv_total == 1);
     CV_Assert((alpha.type() == CV_64F && alpha.at<double>(0) == 1.) 
@@ -483,7 +497,7 @@ int HOGSVM::testVideo(const char* filename, float scale) {
         vector<Rect> detections;
 
         if (i % 3 == 0) {
-        	detections = detect(img, 8, 1.15);
+        	detections = detect(img, 1.15);
 
         	for (size_t j = 0; j < detections.size(); j++) {
         		Scalar color = Scalar(0, 255, 0);
@@ -506,7 +520,7 @@ void HOGSVM::showInfo() {
 }
 
 
-vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
+vector<Rect> HOGSVM::detect(const Mat& image, float scale) {
 	vector<Rect> rawRectDetections;
 	vector<Point> rawPointDetections;
 	vector<Rect> detections;
@@ -517,11 +531,16 @@ vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
     cvtColor(image, gray, COLOR_BGR2GRAY);
 
     if (multiScaleFlag) {
+
+    	if (scale == 1) {
+    		scale = detectorScale;
+    	}
+
     	hog.detectMultiScale(gray, 
 							rawRectDetections, 
 							rawFoundWeights, 
 							0, 
-							Size(step,step),
+							windowStride,
 							Size(0,0),
 							scale);
 
@@ -537,7 +556,7 @@ vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
     				rawPointDetections,
     				rawFoundWeights,
     				0,
-    				Size(step, step),
+    				windowStride,
     				Size(0,0));
 
     	for (size_t i = 0; i < rawPointDetections.size(); i++) {
@@ -547,8 +566,6 @@ vector<Rect> HOGSVM::detect(const Mat& image, int step, float scale) {
     		}
     	}
     }
-
-    
 
     detections = nonMaxSuppression(foundWeights, detections);
 
