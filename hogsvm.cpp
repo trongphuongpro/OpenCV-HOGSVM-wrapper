@@ -500,7 +500,7 @@ int HOGSVM::testVideo(const char* filename, float scale) {
         	detections = detect(img, 1.15);
 
         	for (size_t j = 0; j < detections.size(); j++) {
-        		Scalar color = Scalar(0, 255, 0);
+        		Scalar color(0, 255, 0);
             	rectangle(img, detections[j], color, 2);
         	}
     	}
@@ -561,7 +561,7 @@ vector<Rect> HOGSVM::detect(const Mat& image, float scale) {
 
     	for (size_t i = 0; i < rawPointDetections.size(); i++) {
     		if (rawFoundWeights[i] > 0.6) {
-    			detections.push_back(Rect(rawPointDetections[i], windowSize));
+    			detections.push_back(Rect(rawPointDetections[i], hog.winSize));
     			foundWeights.push_back(rawFoundWeights[i]);
     		}
     	}
