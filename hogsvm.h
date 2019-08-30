@@ -27,7 +27,7 @@ public:
 	void loadTrainingSet(const char*, 
 						const char*);
 
-	void train();
+	void train(const char*);
 	void evaluate(const char*);
 	std::vector<cv::Rect> detect(const cv::Mat&,
 								float = 1);

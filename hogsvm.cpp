@@ -321,10 +321,10 @@ void HOGSVM::computeHOG(Mat& roi) {
 }
 
 
-void HOGSVM::train() {
+void HOGSVM::train(const char* pathToHardTrainDataSet) {
 	if (posCount > 0 && negCount > 0) {
 		softTrain(1.0);
-		hardTrain("/home/guru/learnCV/ObjectDetection/scene13");
+		hardTrain(pathToHardTrainDataSet);
 	}
 	else {
 		cerr << "No training data!" << endl;
